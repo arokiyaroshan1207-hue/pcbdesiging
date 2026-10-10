@@ -1,7 +1,17 @@
 import axios from 'axios';
 
-// Resolve API base URL with fallback to local proxy
-const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+// Resolve API base URL with production fallback to live Render backend
+const getProductionFallbackUrl = () => {
+  if (typeof window !== 'undefined') {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocal) {
+      return 'https://pcbdesiging.onrender.com/api';
+    }
+  }
+  return 'http://localhost:8000/api';
+};
+
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || getProductionFallbackUrl();
 // Normalize: ensure it ends with /api without double slashes
 export const API_BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 export const BACKEND_ROOT_URL = API_BASE_URL.replace(/\/api$/, '');
@@ -29,7 +39,7 @@ export function extractErrorMessage(error) {
     return `Server Error (${error.response.status}): ${error.response.statusText || 'Request failed'}`;
   }
   if (error.request) {
-    return 'Cannot reach backend server. Please verify FastAPI is running on port 8000.';
+    return 'Cannot reach backend server. Please verify the backend is running or give Render 30-50s to wake up from inactivity.';
   }
   return error.message || 'Network request failed.';
 }
