@@ -17,7 +17,9 @@ export default function App() {
   const [inspectionHistory, setInspectionHistory] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
     } catch (e) {
       console.warn('Failed to parse localStorage history:', e);
       return [];

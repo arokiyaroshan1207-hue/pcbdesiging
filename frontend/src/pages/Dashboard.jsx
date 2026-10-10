@@ -10,10 +10,11 @@ export default function Dashboard({
   healthInfo, 
   onSelectInspection 
 }) {
-  // Aggregate telemetry from inspection history
-  const totalInspections = inspectionHistory.length;
-  const totalDefects = inspectionHistory.reduce((sum, item) => sum + (item.summary?.total_defects || 0), 0);
-  const passCount = inspectionHistory.filter((item) => item.summary?.pass_inspection).length;
+  // Aggregate telemetry from inspection history defensively
+  const safeHistory = Array.isArray(inspectionHistory) ? inspectionHistory.filter(Boolean) : [];
+  const totalInspections = safeHistory.length;
+  const totalDefects = safeHistory.reduce((sum, item) => sum + (item?.summary?.total_defects || 0), 0);
+  const passCount = safeHistory.filter((item) => Boolean(item?.summary?.pass_inspection)).length;
   const passRate = totalInspections > 0 ? Math.round((passCount / totalInspections) * 100) : 100;
 
   // Aggregate defect breakdown by class across all historical runs
@@ -26,8 +27,8 @@ export default function Dashboard({
     'Missing Hole': 0,
   };
 
-  inspectionHistory.forEach((item) => {
-    if (item.summary?.defects_by_class) {
+  safeHistory.forEach((item) => {
+    if (item && item.summary && item.summary.defects_by_class) {
       Object.entries(item.summary.defects_by_class).forEach(([cls, count]) => {
         if (defectAggregates[cls] !== undefined) {
           defectAggregates[cls] += count;
