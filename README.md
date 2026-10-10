@@ -86,12 +86,8 @@ PCB-DEFECT-DETECTION/
 
 ### 1. Push to GitHub
 ```bash
-git init
-git add .
-git commit -m "feat: complete PCB Defect Detection System with deployment configuration"
-git branch -M main
-git remote add origin https://github.com/<your-username>/<your-repo-name>.git
-git push -u origin main
+git remote add origin https://github.com/arokiyaroshan1207-hue/pcbdesiging.git
+git push -u origin main --force
 ```
 
 ### 2. Deploy Backend on Render (Web Service)
