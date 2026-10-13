@@ -8,7 +8,8 @@ export default function Dashboard({
   inspectionHistory = [], 
   onNavigateInspect, 
   healthInfo, 
-  onSelectInspection 
+  onSelectInspection,
+  isCheckingHealth = false,
 }) {
   // Aggregate telemetry from inspection history defensively
   const safeHistory = Array.isArray(inspectionHistory) ? inspectionHistory.filter(Boolean) : [];
@@ -94,20 +95,61 @@ export default function Dashboard({
           </div>
         </div>
 
-        <div className="metric-card warning">
-          <div>
-            <span className="metric-label">AI Inference Engine</span>
-            <div className="metric-value" style={{ fontSize: '1.25rem', marginTop: '0.5rem' }}>
-              {healthInfo?.model_loaded ? 'YOLOv8 Active' : 'Offline'}
+        {/* AI Inference Engine Status Card */}
+        {(() => {
+          const isHealthy = healthInfo?.status === 'healthy';
+          const isModelLoaded = isHealthy && healthInfo?.model_loaded === true;
+          const isStandby = healthInfo?.status === 'offline';
+
+          let engineTitle = 'Standby / Asleep';
+          let engineSubtitle = 'Render free tier waking up';
+          let cardColorClass = 'warning';
+          let iconColor = 'var(--color-warning)';
+
+          if (isCheckingHealth && !healthInfo) {
+            engineTitle = 'Connecting...';
+            engineSubtitle = 'Reaching backend server';
+            cardColorClass = 'warning';
+            iconColor = 'var(--color-warning)';
+          } else if (isModelLoaded) {
+            engineTitle = 'YOLOv8 Active';
+            engineSubtitle = 'best.pt verified (6 classes)';
+            cardColorClass = 'accent';
+            iconColor = 'var(--color-accent)';
+          } else if (isHealthy && healthInfo?.model_file_exists === false) {
+            engineTitle = 'Weights Missing';
+            engineSubtitle = 'best.pt missing on backend';
+            cardColorClass = 'danger';
+            iconColor = 'var(--color-danger)';
+          } else if (isHealthy) {
+            engineTitle = 'Engine Warming Up';
+            engineSubtitle = 'Loading best.pt weights';
+            cardColorClass = 'warning';
+            iconColor = 'var(--color-warning)';
+          } else if (isStandby) {
+            engineTitle = 'Server Asleep';
+            engineSubtitle = 'Waking up on Render (~50s)';
+            cardColorClass = 'warning';
+            iconColor = 'var(--color-warning)';
+          }
+
+          return (
+            <div className={`metric-card ${cardColorClass}`}>
+              <div>
+                <span className="metric-label">AI Inference Engine</span>
+                <div className="metric-value" style={{ fontSize: '1.25rem', marginTop: '0.5rem' }}>
+                  {engineTitle}
+                </div>
+                <span className="metric-subtitle">
+                  {engineSubtitle}
+                </span>
+              </div>
+              <div className="metric-icon-box">
+                <Cpu size={24} color={iconColor} />
+              </div>
             </div>
-            <span className="metric-subtitle">
-              {healthInfo?.model_file_exists ? 'best.pt verified' : 'Weights missing'}
-            </span>
-          </div>
-          <div className="metric-icon-box">
-            <Cpu size={24} color="var(--color-warning)" />
-          </div>
-        </div>
+          );
+        })()}
       </div>
 
       {/* Defect Distribution Breakdown Cards */}

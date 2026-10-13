@@ -34,6 +34,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"Results Directory: {RESULTS_DIR}")
     logger.info(f"Models Directory : {MODELS_DIR}")
     logger.info("=" * 60)
+    # Pre-warm AI model during container boot so incoming user requests face zero cold start
+    try:
+        from app.services.detector import detector_service
+        if detector_service.model_file_exists:
+            detector_service.warmup()
+            logger.info("YOLOv8 defect detector preloaded and ready.")
+        else:
+            logger.warning("YOLOv8 weights file not found on disk at startup.")
+    except Exception as warmup_err:
+        logger.warning(f"Engine warm-up skipped on startup: {warmup_err}")
     yield
     logger.info("Stopping PCB Defect Detection API Server - Cleanup completed")
 

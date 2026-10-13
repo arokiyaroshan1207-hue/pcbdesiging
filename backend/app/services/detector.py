@@ -91,6 +91,15 @@ class PCBDetectorService:
 
         try:
             logger.info(f"Loading YOLOv8 model from '{self.model_path}'...")
+            import torch
+            # Enforce single-thread CPU execution to prevent thread contention on containerized/cloud hosts
+            try:
+                torch.set_num_threads(1)
+                if hasattr(torch, "set_num_interop_threads"):
+                    torch.set_num_interop_threads(1)
+            except Exception as th_err:
+                logger.debug(f"Could not adjust torch threads: {th_err}")
+
             from ultralytics import YOLO
 
             # Load YOLO model
@@ -117,6 +126,18 @@ class PCBDetectorService:
             self._load_error = f"Failed to load YOLOv8 model from '{self.model_path}': {str(e)}"
             logger.exception(self._load_error)
             raise RuntimeError(self._load_error) from e
+
+    def warmup(self):
+        """Warm up PyTorch engine with a small synthetic pass to prime JIT buffers."""
+        if not self.is_loaded:
+            self.load_model()
+        try:
+            import numpy as np
+            dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+            self._model.predict(dummy, imgsz=640, verbose=False)
+            logger.info("YOLOv8 inference engine pre-warmed successfully.")
+        except Exception as e:
+            logger.warning(f"Engine warm-up skipped: {e}")
 
     def get_supported_classes(self) -> List[str]:
         """Return the list of class names loaded from model metadata."""
@@ -225,6 +246,7 @@ class PCBDetectorService:
                 source=str(image_path),
                 conf=conf_threshold,
                 iou=iou_threshold,
+                imgsz=640,
                 verbose=False,
             )
         except Exception as e:
@@ -306,7 +328,15 @@ class PCBDetectorService:
         try:
             # yolo_result.plot() renders bounding boxes with classes & confidence badges
             plotted_bgr = yolo_result.plot(line_width=2, font_size=1)
-            cv2.imwrite(str(annotated_path), plotted_bgr)
+            # If the plotted image exceeds 2048px, downscale to prevent large memory spikes on constrained instances
+            max_dim = max(plotted_bgr.shape[0], plotted_bgr.shape[1])
+            if max_dim > 2048:
+                scale = 2048.0 / max_dim
+                nw = int(plotted_bgr.shape[1] * scale)
+                nh = int(plotted_bgr.shape[0] * scale)
+                plotted_bgr = cv2.resize(plotted_bgr, (nw, nh), interpolation=cv2.INTER_AREA)
+
+            cv2.imwrite(str(annotated_path), plotted_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
             logger.info(f"Saved annotated detection image to: {annotated_path}")
         except Exception as e:
             logger.warning(f"Failed to plot bounding boxes using YOLO plotter: {e}. Falling back to copy.")

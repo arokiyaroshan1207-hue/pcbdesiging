@@ -100,8 +100,22 @@ class ImageService:
         destination_path = UPLOAD_DIR / safe_filename
 
         try:
-            destination_path.write_bytes(contents)
-            logger.info(f"Saved uploaded PCB image to: {destination_path} ({width}x{height}, {file_size} bytes)")
+            # If uploaded image exceeds 2560px in either dimension, optimize to prevent
+            # CPU thrashing and memory exhaustion on containerized instances (Render 512MB RAM)
+            max_side = max(width, height)
+            if max_side > 2560:
+                scale = 2560.0 / max_side
+                new_size = (int(width * scale), int(height * scale))
+                image_buffer.seek(0)
+                with Image.open(image_buffer) as pil_resize_img:
+                    resized = pil_resize_img.convert("RGB").resize(new_size, Image.Resampling.LANCZOS)
+                    resized.save(destination_path, format="JPEG", quality=90, optimize=True)
+                width, height = new_size
+                img_format = "JPEG"
+                logger.info(f"Downsampled oversized upload to {width}x{height} for efficient inference: {destination_path}")
+            else:
+                destination_path.write_bytes(contents)
+                logger.info(f"Saved uploaded PCB image to: {destination_path} ({width}x{height}, {file_size} bytes)")
         except Exception as e:
             logger.error(f"Failed to write image file to disk: {e}")
             raise HTTPException(

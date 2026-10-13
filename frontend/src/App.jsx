@@ -51,10 +51,14 @@ export default function App() {
 
   useEffect(() => {
     refreshHealth();
-    // Re-check health every 30 seconds
-    const interval = setInterval(refreshHealth, 30000);
-    return () => clearInterval(interval);
   }, [refreshHealth]);
+
+  // Adaptive polling: poll every 5s while waking up/offline, every 30s when healthy
+  useEffect(() => {
+    const pollInterval = healthInfo?.status === 'healthy' ? 30000 : 5000;
+    const interval = setInterval(refreshHealth, pollInterval);
+    return () => clearInterval(interval);
+  }, [refreshHealth, healthInfo?.status]);
 
   const handleInspectionComplete = (result) => {
     setInspectionHistory((prev) => [result, ...prev]);
@@ -72,6 +76,8 @@ export default function App() {
     setActiveTab('reports');
   };
 
+  const isServerSleeping = !healthInfo || healthInfo?.status === 'offline';
+
   return (
     <div className="app-container">
       <Navbar
@@ -82,18 +88,45 @@ export default function App() {
         isCheckingHealth={isCheckingHealth}
       />
 
+      {/* Render Free-Tier Cold-Start Awareness Banner */}
+      {isServerSleeping && (
+        <div className="cold-start-banner">
+          <div className="cold-start-content">
+            <span className="cold-start-pulse"></span>
+            <div>
+              <strong>Cloud Backend Warming Up (Render Free Tier):</strong>{' '}
+              <span>
+                Free hosting instances sleep after 15 minutes of inactivity. Initial wake-up takes ~40-60 seconds.
+                {isCheckingHealth ? ' Pinging server...' : ' Waiting for container boot.'}
+              </span>
+            </div>
+          </div>
+          <button
+            className="btn btn-secondary"
+            style={{ fontSize: '0.78rem', padding: '0.3rem 0.75rem', whiteSpace: 'nowrap' }}
+            onClick={refreshHealth}
+            disabled={isCheckingHealth}
+          >
+            {isCheckingHealth ? 'Checking...' : 'Check Server'}
+          </button>
+        </div>
+      )}
+
       <main className="main-content">
         {activeTab === 'dashboard' && (
           <Dashboard
             inspectionHistory={inspectionHistory}
             onNavigateInspect={() => setActiveTab('inspect')}
             healthInfo={healthInfo}
+            isCheckingHealth={isCheckingHealth}
             onSelectInspection={handleSelectHistoricalInspection}
           />
         )}
 
         {activeTab === 'inspect' && (
           <InspectPCB
+            healthInfo={healthInfo}
+            isCheckingHealth={isCheckingHealth}
             onInspectionComplete={handleInspectionComplete}
             onViewReport={handleViewReport}
           />

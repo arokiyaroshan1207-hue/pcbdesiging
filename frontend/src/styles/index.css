@@ -191,6 +191,52 @@ body {
   box-shadow: 0 0 8px var(--color-danger);
 }
 
+.status-dot.connecting,
+.status-dot.standby {
+  background-color: var(--color-warning);
+  box-shadow: 0 0 8px var(--color-warning);
+  animation: pulse-dot 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.6; }
+}
+
+/* Cold-Start Notice Banner */
+.cold-start-banner {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1.25rem;
+  margin: 1rem auto 0;
+  max-width: 1400px;
+  width: calc(100% - 3rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.cold-start-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cold-start-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #eab308;
+  box-shadow: 0 0 8px #eab308;
+  flex-shrink: 0;
+  animation: pulse-dot 1.4s infinite ease-in-out;
+}
+
 /* Page Header */
 .page-header {
   margin-bottom: 2rem;

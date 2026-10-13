@@ -18,7 +18,7 @@ export const BACKEND_ROOT_URL = API_BASE_URL.replace(/\/api$/, '');
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 45000, // 45 seconds for heavy image inference
+  timeout: 120000, // 120 seconds to comfortably accommodate Render free tier cold-start wake-up (~50-60s)
 });
 
 /**
@@ -26,6 +26,11 @@ const apiClient = axios.create({
  */
 export function extractErrorMessage(error) {
   if (!error) return 'An unknown error occurred.';
+  
+  if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+    return 'The request timed out. The backend is likely waking up from Render free-tier standby (~50s). Please click Inspect again in a few seconds!';
+  }
+
   if (error.response) {
     const data = error.response.data;
     if (data?.detail) {
@@ -38,9 +43,11 @@ export function extractErrorMessage(error) {
     }
     return `Server Error (${error.response.status}): ${error.response.statusText || 'Request failed'}`;
   }
+
   if (error.request) {
-    return 'Cannot reach backend server. Please verify the backend is running or give Render 30-50s to wake up from inactivity.';
+    return 'Backend is currently waking up from standby (Render free-tier cold start). Please wait ~30-50s and retry.';
   }
+
   return error.message || 'Network request failed.';
 }
 

@@ -4,26 +4,43 @@ import { Cpu, LayoutDashboard, ScanEye, FileSpreadsheet, RefreshCw, AlertCircle,
 export default function Navbar({ activeTab, setActiveTab, healthInfo, onRefreshHealth, isCheckingHealth }) {
   const isOnline = healthInfo?.status === 'healthy';
   const modelLoaded = healthInfo?.model_loaded === true;
+  const isStandby = healthInfo?.status === 'offline';
 
   let statusText = 'CONNECTING...';
-  let statusClass = 'offline';
+  let statusClass = 'connecting';
   let StatusIcon = AlertCircle;
 
-  if (isOnline) {
+  if (isCheckingHealth && !healthInfo) {
+    statusText = 'WAKING UP SERVER...';
+    statusClass = 'connecting';
+  } else if (isOnline) {
     if (modelLoaded) {
       statusText = 'AI ENGINE READY';
       statusClass = 'online';
       StatusIcon = CheckCircle2;
-    } else {
+    } else if (healthInfo?.model_file_exists === false) {
       statusText = 'WEIGHTS MISSING';
       statusClass = 'offline';
       StatusIcon = AlertCircle;
+    } else {
+      statusText = 'ENGINE INITIALIZING';
+      statusClass = 'connecting';
+      StatusIcon = AlertCircle;
     }
-  } else if (healthInfo?.error) {
-    statusText = 'BACKEND OFFLINE';
-    statusClass = 'offline';
+  } else if (isCheckingHealth) {
+    statusText = 'RECONNECTING...';
+    statusClass = 'connecting';
+  } else if (isStandby || healthInfo?.error) {
+    statusText = 'STANDBY (WAKING UP)';
+    statusClass = 'standby';
     StatusIcon = AlertCircle;
   }
+
+  const tooltipText = isOnline
+    ? (healthInfo?.model_status_message || 'Backend operational & model ready')
+    : (isStandby
+        ? 'Backend is asleep on Render Free Tier. Waking up takes ~50s.'
+        : 'Connecting to backend telemetry...');
 
   return (
     <nav className="navbar">
@@ -64,7 +81,7 @@ export default function Navbar({ activeTab, setActiveTab, healthInfo, onRefreshH
       </div>
 
       <div className="nav-status">
-        <div className="status-indicator" title={healthInfo?.model_status_message || 'Backend telemetry'}>
+        <div className="status-indicator" title={tooltipText}>
           <span className={`status-dot ${statusClass}`}></span>
           <span style={{ fontWeight: 600 }}>{statusText}</span>
         </div>

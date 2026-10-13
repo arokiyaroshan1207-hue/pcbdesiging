@@ -7,7 +7,72 @@ import WebcamModal from '../components/WebcamModal';
 import DetectionResults from '../components/DetectionResults';
 import { detectPCBDefects, extractErrorMessage, API_BASE_URL } from '../services/api';
 
-export default function InspectPCB({ onInspectionComplete, onViewReport }) {
+/**
+ * Optimizes oversized photos (especially smartphone camera captures > 2048px or > 2.5MB)
+ * to speed up upload transfer and prevent cloud container memory limits from triggering.
+ */
+async function optimizeImageForUpload(file, maxDimension = 2048, quality = 0.92) {
+  if (!file || !file.type.startsWith('image/')) return file;
+  if (file.size < 1.5 * 1024 * 1024 && !file.type.includes('bmp')) {
+    return file; // Already reasonably sized
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+
+      if (width <= maxDimension && height <= maxDimension && file.size < 3 * 1024 * 1024) {
+        resolve(file);
+        return;
+      }
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob && blob.size < file.size) {
+            const optimizedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(optimizedFile);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+export default function InspectPCB({ onInspectionComplete, onViewReport, healthInfo, isCheckingHealth }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -110,12 +175,22 @@ export default function InspectPCB({ onInspectionComplete, onViewReport }) {
     try {
       setIsAnalyzing(true);
       setError(null);
-      setAnalysisStep('Streaming PCB image to backend pipeline...');
 
+      const isServerAsleep = !healthInfo || healthInfo?.status === 'offline';
+      if (isServerAsleep) {
+        setAnalysisStep('Connecting to AI backend pipeline (waking server if on standby)...');
+      } else {
+        setAnalysisStep('Optimizing image for detection pipeline...');
+      }
+
+      // Optimize oversized smartphone photos to prevent upload delay and memory exhaustion
+      const fileToUpload = await optimizeImageForUpload(selectedFile, 2048, 0.92);
+
+      setAnalysisStep('Streaming PCB image to backend pipeline...');
       await new Promise((r) => setTimeout(r, 200));
       setAnalysisStep('Running YOLOv8 inference and defect classification...');
 
-      const result = await detectPCBDefects(selectedFile, confThreshold, iouThreshold);
+      const result = await detectPCBDefects(fileToUpload, confThreshold, iouThreshold);
 
       setAnalysisStep('Formatting bounding box overlays...');
       setDetectionResult(result);
@@ -166,12 +241,22 @@ export default function InspectPCB({ onInspectionComplete, onViewReport }) {
       </div>
 
       {error && (
-        <div className="alert-banner alert-danger">
-          <AlertCircle size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div>
-            <strong>Inspection Error:</strong>
-            <p style={{ marginTop: '0.25rem', fontSize: '0.9rem' }}>{error}</p>
+        <div className="alert-banner alert-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+            <AlertCircle size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <strong>Inspection Notice:</strong>
+              <p style={{ marginTop: '0.25rem', fontSize: '0.9rem' }}>{error}</p>
+            </div>
           </div>
+          <button
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', whiteSpace: 'nowrap', marginLeft: '1rem' }}
+            onClick={runAnalysis}
+            disabled={isAnalyzing}
+          >
+            <RefreshCw size={14} className={isAnalyzing ? 'spin' : ''} /> Retry
+          </button>
         </div>
       )}
 
@@ -367,9 +452,27 @@ export default function InspectPCB({ onInspectionComplete, onViewReport }) {
               <Sparkles size={16} color="var(--color-accent)" />
               Automated Inspection Pipeline
             </h4>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               Scans for 6 standard manufacturing flaws: Open Circuit, Short Circuit, Mouse Bite, Spur, Spurious Copper, and Missing Hole.
             </p>
+
+            {(!healthInfo || healthInfo?.status === 'offline') && (
+              <div style={{
+                background: 'rgba(234, 179, 8, 0.08)',
+                border: '1px solid rgba(234, 179, 8, 0.25)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.6rem 0.85rem',
+                fontSize: '0.8rem',
+                color: '#eab308',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}>
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>Backend is on standby. First inspection will wake container (~40-50s).</span>
+              </div>
+            )}
 
             <button
               className="btn btn-primary"
